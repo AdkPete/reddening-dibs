@@ -1,0 +1,33 @@
+## General Parameters
+
+Window_Width				10		##Consider points within this many angstroms of the DIB center
+
+
+### Continuum Parameters
+
+L_order					6	## Order of Legendre Contimuum Fit
+width					20		## Exclude points within this many angstroms of the center wavelength
+other_exclutions_fit			5795-5799,5778.5-5782.5,6201-6205,5885-5888		## Exclude points within these ranges as well
+
+#Auto
+
+low					0
+high				
+## 5780
+#low 					5778.9
+#high					5782.6
+
+## 6613
+
+#low					6612.5
+#high					6614.7
+
+## 5795
+
+#low					5796.0
+#high					5798.0
+### Plot Parameters
+
+Plot_Limits				7.5		## X limits for plots. Set to 0-0 for default range
+
+delta_lambda				1.4		## Set window width for integration limit calculations. 1.4 is default : Set to 0 to match IRAF calculations
