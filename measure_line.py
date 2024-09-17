@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 import argparse
 from astropy.io import fits
 import scipy.signal as signal
+import scipy.interpolate as interp
+import scipy.optimize as opt
 
 
 class spectrum:
@@ -93,7 +95,7 @@ class spectrum:
         
         self.delta_lambda = float(self.params["delta_lambda"])
 
-    def plot_spectrum(self , filename = None , pause = False , vline = None , figsize = None , xlims = None , show_cont = True):
+    def plot_spectrum(self , filename = None , pause = False , vline = None , figsize = None , xlims = None , show_cont = True , input_vals = 2):
 
         '''
         Function to plot and display this spectrum
@@ -120,13 +122,20 @@ class spectrum:
         plt.xlabel("Wavelength ($\AA$)")
         plt.ylabel("Normalized Spectrum")
 
-        if filename is None and not pause:
-            res = plt.ginput(2)
+        if filename is None and not pause and input_vals == 2:
+            res = plt.ginput(input_vals)
             plt.show(block=False)
             vals = [res[0][0] , res[1][0]]
             low = min(vals)
             high = max(vals)
             return low , high
+        elif filename is None and not pause:
+            res = plt.ginput(input_vals)
+            plt.show(block=False)
+            vals = []
+            for i in range(input_vals):
+                vals.append(res[i][0])
+            return vals
         elif pause:
             plt.pause(0.5)
         else:
@@ -484,9 +493,6 @@ def measure_ew(s1 , lambda_c , param_file_name = "params.txt"):
     lambda_c : float
         central wavelength for the line (in Angstroms)
     '''
-
-
-    
     
     if not plt.fignum_exists(1):
         fig = plt.figure(figsize = (8,8))
@@ -508,7 +514,6 @@ def measure_ew(s1 , lambda_c , param_file_name = "params.txt"):
     ## Get integration limits
     low , high = s1.get_limits(lambda_c)
 
-    
     mlow = None
     mhigh = None
     while True:
@@ -541,9 +546,6 @@ def measure_ew(s1 , lambda_c , param_file_name = "params.txt"):
         elif u.lower().strip()[0] == "r":
             mlow = None
             mhigh = None
-  
-        
-    
 
 if __name__ == "__main__":
     
