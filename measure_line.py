@@ -559,5 +559,5 @@ if __name__ == "__main__":
     spec1 = spectrum(args.fname[0])
     
     EW , sigma_EW = measure_ew(spec1, args.lambda_c[0])
-    print (EW , "+/-" , sigma_EW)
+    print (f"Equivalent Width = {round(EW , 3)} +/- {round(sigma_EW , 3)}")
     
