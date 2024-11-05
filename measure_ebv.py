@@ -25,6 +25,33 @@ DIBs = ['5487.7' , '5705.1' , "5780.5" , "5797.1" , "6196.0" , "6204.5" , "6283.
 Na =[ '5889.98' , '5895.93'] ##D2 , D1
 debug = [5780.5]
 
+
+### Model parameters from Friedmann 2011 / Poznanski 2012
+
+fit_par = {}
+fit_par["5487.7"] = [-6.41E-02 , 9.672E-03]
+fit_par["5705.1"] = [-1.74E-01,1.2E-02]
+fit_par["5780.5"] = [-8.36E-03 , 1.98E-03]
+fit_par["5797.1"] = [-2.86E-02 , 5.74E-03]
+fit_par["6196.0"] = [-5.07E-02 , 2.11E-02]
+fit_par["6204.5"] = [-7.22E-02 , 5.99E-03]
+fit_par["6283.8"] = [ -7.71E-02 , 9.57E-04]
+fit_par["6613.6"] = [1.96E-02 , 4.63E-03]
+fit_par["Na D1"] = [-1.76 , 2.47] ##5895.93
+fit_par["Na D2"] = [-1.91 , 2.16] ##5889.98
+
+unc_par = {} ##Parameter uncertainties
+unc_par["5487.7"] = [1.31E-02 , 0.25E-03]
+unc_par["5705.1"] = [0.16E-01, 0.16E-02]
+unc_par["5780.5"] = [3.48E-03 , 0.01E-03]
+unc_par["5797.1"] = [0.57E-02 , 0.06E-03]
+unc_par["6196.0"] = [0.56E-02 , 0.06E-02]
+unc_par["6204.5"] = [0.67E-02 , 0.08E-03]
+unc_par["6283.8"] = [ 0.78E-02 , 0.17E-04]
+unc_par["6613.6"] = [0.37E-02 , 0.04E-03]
+unc_par["Na D1"] = [0.17 , 0]
+unc_par["Na D2"] = [0.15 , 0]
+
 def measure_spectrum(filename):
     '''
     Function to measure EW for every DIB/Na feature in a spectrum
@@ -36,14 +63,16 @@ def measure_spectrum(filename):
         lines += DIBs
     if args.NA:
         lines += Na
-    lines = debug
+    #lines = debug
     ewdata = []
     for lc in lines:
         
         lambda_c = float(lc)
         ew , ewsigma = ml.measure_ew(spec , lambda_c , param_file_name = "params.txt")
         print (ew , ewsigma)
-        ewdata = [ lc , ew , ewsigma]
+        
+        ewdata.append([ lc , ew , ewsigma])
+        
         
     return ewdata
 
@@ -117,13 +146,14 @@ def build_scatter_table(filename = "data_files/Friedmann_Table_1.txt"):
         res = []
         fit_ebv = []
         for i in range(len(keys)):
-            res = []
-            res.append({})
+            res = {}
+
+            res["f1"] = [[]]
+            res["f1"][0].append(keys[i])
+            res["f1"][0].append(dib[i] / 1000.0)
+            res["f1"][0].append(dib[i] / 1000.0) ##Placeholder. Doesn't get used
             
-            res[-1]["DIB"] = [keys[i]]
-            res[-1]["EW"] = [dib[i] / 1000.0]
-            res[-1]["Err"] = [dib[i] / 1000.0] ##Placeholder. Doesn't get used
-            fit_ebv.append(measure_ebv(res)[0])
+            fit_ebv.append(measure_dib_ebv(res,use_scatter=False)[0])
         
         
         fit_ebv = np.array(fit_ebv)
@@ -178,26 +208,91 @@ def get_scatter(ew , dibkey , scatter_dict):
     '''
     
     bins , sigmas , data = scatter_dict[dibkey]
+   
     for i in range(len(bins)):
         bin = bins[i]
         if ew >= bin[0] and ew < bin[1]:
             return sigmas[i]
         
-def measure_dib_ebv(EW_data):
+def measure_dib_ebv(EW_data , use_scatter = True):
     '''
     Function to measure E(B-V) from DIB measurements
     '''
-
+    
+    if use_scatter:
+        scatter = build_scatter_table()
 
     ebv = []
-    ebvsigmas = []
-    for spectrum_fname in EW_data.keys():
-        for line in EW_data[spectrum_fname]:
+    ebv_err = []
+    lines_used = []
+    for lc in DIBs:
+        EW_values = []
+        EW_errors = []
+        
+        for specname in EW_data.keys():
+            for line in EW_data[specname]:
+                
+                
+                if line[1] < 0:
+                    continue
+                if str(line[0]) == lc:
+                    EW_values.append(line[1])
+                    EW_errors.append(line[2])
+                    
+        if len(EW_values) == 0:
             
-            if line[1] < 0:
-                continue
-            
-    return 0
+            continue
+        
+        lines_used.append(lc)
+        
+        EW_values = np.array(EW_values)
+        EW_errors = np.array(EW_errors)
+        ## Convert to a E(B-V) Value
+        w = 1 / np.array(EW_errors) ** 2
+        EW = ( np.sum(w * EW_values) / np.sum(w) )
+        
+        ## W/ Standard Error prop + some algebra,
+        Err = 1 / np.sqrt( np.sum( w ) )
+        
+        fit_key = str(lc)
+        if fit_key not in fit_par.keys():
+            print (f"Error, line {line} is not supported")
+            raise ValueError
+        
+        a = fit_par[fit_key][0]
+        b = fit_par[fit_key][1]
+        sa = unc_par[fit_key][0]
+        sb = unc_par[fit_key][1]
+
+        
+        bv = a + b * EW * 1000.0
+        ebv.append(bv)
+        if not use_scatter:
+            ebv_err.append(1)
+            continue
+        
+        
+        
+        sigma_ebv = get_scatter(EW * 1000.0 , str(lc) , scatter)
+        
+        measure_err = Err * 1000.0 * b
+        
+        joint_err = np.sqrt(sigma_ebv ** 2 + measure_err ** 2 )
+        
+        ebv_err.append(joint_err)
+    
+
+    ### Now compute the final E(B-V)
+    ebv_arr = np.array(ebv)
+    ebv_errors = np.array(ebv_err)
+    
+    w = 1/ ebv_errors ** 2
+    ebv = np.sum(w * ebv_arr) / np.sum(w)
+    
+    ## W/ Standard Error prop + some algebra,
+    ebv_err = 1 / np.sqrt( np.sum( w ) )
+    
+    return ebv , ebv_err , ebv_arr , ebv_errors , DIBs
 
 def measure_na_ebv(EW_data):
     
@@ -231,4 +326,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     EW_Data  = measure_all_spectra(args.filenames)
-    measure_dib_ebv(EW_Data)
+    
+    EBV , Err , ebv1 , ebv2 , used_lines = measure_dib_ebv(EW_Data)
+    
+    print (f"E(B-V) = {round(EBV , 2)} +/- {round(Err , 2)}")
