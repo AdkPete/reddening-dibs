@@ -329,4 +329,4 @@ if __name__ == "__main__":
     
     EBV , Err , ebv1 , ebv2 , used_lines = measure_dib_ebv(EW_Data)
     
-    print (f"E(B-V) = {round(EBV , 2)} +/- {round(Err , 2)}")
+    print (f"\n\nE(B-V) = {round(EBV , 2)} +/- {round(Err , 2)}")
