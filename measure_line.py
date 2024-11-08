@@ -15,7 +15,7 @@ from astropy.io import fits
 import scipy.signal as signal
 import scipy.interpolate as interp
 import scipy.optimize as opt
-
+import sys
 
 class spectrum:
 
@@ -531,10 +531,17 @@ def measure_ew(s1 , lambda_c , param_file_name = "params.txt"):
         s1.plot_spectrum(pause = True , vline = [lambda_c , low , high] ,
              xlims = [ lambda_c - pw , lambda_c + pw ] , show_cont = True)
         
-        u = input("Use this measurement? (y/n/r) --> ")
+        u = input("Use this measurement? (y/n/m/r/q) --> ")
         if u == "": ##Repeat calculation, including param file read
             continue
+        
+        elif u.lower()[0] == "q":
+            sys.exit()
+            
         elif u.lower()[0] == "n":
+            return -1 , -1
+        
+        elif u.lower()[0] == "m":
             low , high = s1.plot_spectrum(vline = [lambda_c , low , high] , 
             xlims = [ lambda_c - pw , lambda_c + pw ] , show_cont = True)
             mlow = low
