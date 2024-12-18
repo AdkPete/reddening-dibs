@@ -15,14 +15,16 @@ uncertainty
 '''
 
 import numpy as np
+import os
 
 import argparse
 import utility as util
 import measure_line as ml
-
+from tabulate import tabulate
 ## Arrays of central wavelenghths.
-DIBs = ['5487.7' , '5705.1' , "5780.5" , "5797.1" , "6196.0" , "6204.5" , "6283.8" , "6613.6"]
-Na =[ '5889.98' , '5895.93'] ##D2 , D1
+DIBs = ['5487.7', '5705.1', "5780.5", "5797.1", "6196.0", "6204.5",
+        "6283.8", "6613.6"]
+Na = [ '5889.98' , '5895.93'] ##D2 , D1
 debug = [5780.5]
 
 
@@ -37,8 +39,8 @@ fit_par["6196.0"] = [-5.07E-02 , 2.11E-02]
 fit_par["6204.5"] = [-7.22E-02 , 5.99E-03]
 fit_par["6283.8"] = [ -7.71E-02 , 9.57E-04]
 fit_par["6613.6"] = [1.96E-02 , 4.63E-03]
-fit_par["Na D1"] = [-1.76 , 2.47] ##5895.93
-fit_par["Na D2"] = [-1.91 , 2.16] ##5889.98
+fit_par["5895.93"] = [-1.76 , 2.47] ##5895.93
+fit_par["5889.98"] = [-1.91 , 2.16] ##5889.98
 
 unc_par = {} ##Parameter uncertainties
 unc_par["5487.7"] = [1.31E-02 , 0.25E-03]
@@ -49,8 +51,8 @@ unc_par["6196.0"] = [0.56E-02 , 0.06E-02]
 unc_par["6204.5"] = [0.67E-02 , 0.08E-03]
 unc_par["6283.8"] = [ 0.78E-02 , 0.17E-04]
 unc_par["6613.6"] = [0.37E-02 , 0.04E-03]
-unc_par["Na D1"] = [0.17 , 0]
-unc_par["Na D2"] = [0.15 , 0]
+unc_par["5895.93"] = [0.17 , 0]
+unc_par["5889.98"] = [0.15 , 0]
 
 def measure_spectrum(filename):
     '''
@@ -80,9 +82,19 @@ def measure_all_spectra(file_list):
     '''
     Function to measure EW from each spectrum provided
     '''
+    if len(file_list) == 1 and os.path.isdir(file_list[0]):
+        files = os.listdir(file_list[0])
+        for i in range(len(files)):
+            files[i] = os.path.join(file_list[0] , files[i])
+        
+    else:
+        files = file_list
     results = {}
-    for fname in file_list:
-        ewdata = measure_spectrum(fname)
+    for fname in files:
+        try:
+            ewdata = measure_spectrum(fname)
+        except:
+            continue
         results[fname] = ewdata
         
     return results
@@ -109,16 +121,13 @@ def build_scatter_table(filename = "data_files/Friedmann_Table_1.txt"):
     '''
     
 
-    dib_data = util.read_file(filename , delim="\t" , comment = "#" , min_length = 5)
-    dibs = ['5487.7' , '5705.1' , "5780.5" , "5797.1" , "6196.0" , "6204.5" , "6283.8" , "6613.6"]
-    dib_fits = []
-    
+    dib_data = util.read_file(filename, delim="\t", comment = "#",
+        min_length = 5)
+    dibs = ['5487.7', '5705.1', "5780.5", "5797.1", "6196.0", "6204.5",
+        "6283.8", "6613.6"]
+
     scatter = {}
-    
-    dib_res = []
-    ebv_res = []
-    err_res = []
-    
+
     for dibkey in dibs:
         ebv = []
         dib = []
@@ -151,9 +160,9 @@ def build_scatter_table(filename = "data_files/Friedmann_Table_1.txt"):
             res["f1"] = [[]]
             res["f1"][0].append(keys[i])
             res["f1"][0].append(dib[i] / 1000.0)
-            res["f1"][0].append(dib[i] / 1000.0) ##Placeholder. Doesn't get used
+            res["f1"][0].append(dib[i] / 1000.0)
             
-            fit_ebv.append(measure_dib_ebv(res,use_scatter=False)[0])
+            fit_ebv.append(measure_ebv(res,use_scatter=False)[0])
         
         
         fit_ebv = np.array(fit_ebv)
@@ -214,18 +223,72 @@ def get_scatter(ew , dibkey , scatter_dict):
         if ew >= bin[0] and ew < bin[1]:
             return sigmas[i]
         
-def measure_dib_ebv(EW_data , use_scatter = True):
+
+def EW_to_ebv(EW , Err , lc):
+    '''
+    Function to convert EW to E(B-V) using the Friedmann 2011
+    calibrations (Poznanski 2012 in the case of the Na lines)
+    '''
+
+    fit_key = str(lc)
+
+    if fit_key not in fit_par.keys():
+        print (f"Error, line {fit_key} is not supported\
+            (not in fit parameters)")
+        raise ValueError
+
+    if fit_key in DIBs:
+
+        a = fit_par[fit_key][0]
+        b = fit_par[fit_key][1]
+        sa = unc_par[fit_key][0]
+        sb = unc_par[fit_key][1]
+        bv = a + b * EW * 1000.0
+        measure_err = Err * 1000.0 * b
+        return bv , measure_err
+
+    elif fit_key in Na:
+        a = fit_par[fit_key][0]
+        b = fit_par[fit_key][1]
+        sa = unc_par[fit_key][0]
+        sb = unc_par[fit_key][1]
+        bv = 10 ** (a + b * EW)
+        
+        measure_err = b * np.log(10) * bv * Err * 1000.0
+        
+        return bv , 0.35 * bv
+    
+    else:
+        print (f"Error, line {fit_key} is not supported \
+            (not a known DIB or Na Line)")
+        raise ValueError
+
+def measure_ebv(EW_data , use_scatter = True , useDIB = True , useNa = True):
     '''
     Function to measure E(B-V) from DIB measurements
     '''
     
-    if use_scatter:
+    if use_scatter and useDIB:
+        ## If not DIB, then no need to build the DIB scatter table
         scatter = build_scatter_table()
 
     ebv = []
     ebv_err = []
-    lines_used = []
-    for lc in DIBs:
+    table_rows = []
+    header = ["Line" , "EW (milliangstroms)" , "EW Error (milliangstroms)",
+        "E(B-V)" , "E(B-V) Error"]
+    table_rows.append(header)
+    lines = []
+    if useDIB:
+        lines += DIBs
+    if useNa:
+        lines += Na
+        
+    if len(lines) == 0:
+        print ("Error, no lines to measure")
+        return 0
+
+    for lc in lines:
         EW_values = []
         EW_errors = []
         
@@ -233,55 +296,59 @@ def measure_dib_ebv(EW_data , use_scatter = True):
             for line in EW_data[specname]:
                 
                 
-                if line[1] < 0:
+                if line[1] < 0: ## Negative EW measurements ; not useful here
                     continue
                 if str(line[0]) == lc:
                     EW_values.append(line[1])
                     EW_errors.append(line[2])
                     
-        if len(EW_values) == 0:
-            
-            continue
+        if len(EW_values) == 0: ## No EW Measurements, continue
+            continue 
         
-        lines_used.append(lc)
+        
         
         EW_values = np.array(EW_values)
         EW_errors = np.array(EW_errors)
-        ## Convert to a E(B-V) Value
+        ## Convert to a E(B-V) Value. Starts with mean EW
+
         w = 1 / np.array(EW_errors) ** 2
         EW = ( np.sum(w * EW_values) / np.sum(w) )
         
-        ## W/ Standard Error prop + some algebra,
+        ## W/ Standard Error prop
         Err = 1 / np.sqrt( np.sum( w ) )
         
-        fit_key = str(lc)
-        if fit_key not in fit_par.keys():
-            print (f"Error, line {line} is not supported")
-            raise ValueError
-        
-        a = fit_par[fit_key][0]
-        b = fit_par[fit_key][1]
-        sa = unc_par[fit_key][0]
-        sb = unc_par[fit_key][1]
-
-        
-        bv = a + b * EW * 1000.0
+        bv , measure_err = EW_to_ebv(EW , Err , lc)
         ebv.append(bv)
+        
+        
         if not use_scatter:
             ebv_err.append(1)
             continue
         
+        if str(lc) in DIBs:
+            sigma_ebv = get_scatter(EW * 1000.0 , str(lc) , scatter)
         
-        
-        sigma_ebv = get_scatter(EW * 1000.0 , str(lc) , scatter)
-        
-        measure_err = Err * 1000.0 * b
-        
-        joint_err = np.sqrt(sigma_ebv ** 2 + measure_err ** 2 )
+            joint_err = np.sqrt(sigma_ebv ** 2 + measure_err ** 2 )
+        elif str(lc) in Na:
+            joint_err = np.sqrt(measure_err ** 2 + (bv * 0.35) ** 2)
+        else:
+            print (f"Warning: Line {lc} not known")
         
         ebv_err.append(joint_err)
-    
-
+        
+        row = [] ## Row for nice table output
+        if lc not in Na:
+            row.append(lc)
+        else:
+            if lc == Na[0]:
+                row.append(lc + " Na D2")
+            else:
+                row.append(lc + " Na D1")
+        row.append(round(EW * 1000.0 , 1))
+        row.append(round( measure_err * 1000.0 , 1))
+        row.append(round(bv , 2))
+        row.append(round(joint_err , 2))
+        table_rows.append(row)
     ### Now compute the final E(B-V)
     ebv_arr = np.array(ebv)
     ebv_errors = np.array(ebv_err)
@@ -292,41 +359,31 @@ def measure_dib_ebv(EW_data , use_scatter = True):
     ## W/ Standard Error prop + some algebra,
     ebv_err = 1 / np.sqrt( np.sum( w ) )
     
-    return ebv , ebv_err , ebv_arr , ebv_errors , DIBs
+    return ebv , ebv_err , ebv_arr , ebv_errors , table_rows
 
-def measure_na_ebv(EW_data):
-    
-    '''
-    Function to measure E(B-V) from Na measurements
-    '''
-    
-    return 0
-
-def measure_ebv(EW_data):
-    
-    '''
-    Function to measure E(B-V) from DIB and Na measurements
-    '''
-    
-    return 0
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Measure Line EW')
-    parser.add_argument('DIB', metavar='DIB_measurement_flag', type=bool, nargs = 1,
-                    help='Flag that determines if the script will measure DIB EW')
+    parser.add_argument('DIB', metavar='DIB_measurement_flag', type=bool,
+        nargs = 1,
+        help='Flag that determines if the script will measure DIB EW')
     
-    parser.add_argument('NA', metavar='Na_measurement_flag', type=bool, nargs = 1,
-                    help='Flag that determines if the script will measure DIB EW')
+    parser.add_argument('NA', metavar='Na_measurement_flag', type=bool,
+        nargs = 1,
+        help='Flag that determines if the script will measure DIB EW')
     
-    parser.add_argument('filenames', metavar='List_of_filenames'
-                        , type = str , nargs = '*'
-                        , help = "List of filenames that you want to analyze")
+    parser.add_argument('filenames', metavar='List_of_filenames_or_directory',
+        type = str , nargs = '*', help = "List of filenames (or a directory\
+        containing these files) that you want to analyze")
     
     args = parser.parse_args()
     
     EW_Data  = measure_all_spectra(args.filenames)
     
-    EBV , Err , ebv1 , ebv2 , used_lines = measure_dib_ebv(EW_Data)
+    EBV, Err, ebv1, ebv2, table = measure_ebv(EW_Data, useDIB = args.DIB,
+        useNa = args.NA)
     
     print (f"\n\nE(B-V) = {round(EBV , 2)} +/- {round(Err , 2)}")
+    
+    print (tabulate(table , tablefmt="fancy_grid"))
